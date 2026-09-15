@@ -1,0 +1,33 @@
+# Configuration Doxygen pour le firmware Lightning_Detector (Arduino / AS3935).
+# Seuls les réglages qui diffèrent des valeurs par défaut de Doxygen sont listés ici.
+# Génération : `doxygen Doxyfile` depuis la racine du dépôt (voir aussi .github/workflows/doxygen.yml).
+
+PROJECT_NAME           = "Lightning Detector"
+PROJECT_BRIEF          = "Détecteur de foudre AS3935 (firmware Arduino, compatible SCPI)"
+OUTPUT_LANGUAGE        = French
+OUTPUT_DIRECTORY       = doxygen-output
+
+INPUT                  = Lightning_Detector
+RECURSIVE              = YES
+FILE_PATTERNS          = *.ino *.h *.cpp
+
+# Doxygen ne reconnaît pas l'extension .ino nativement : on la traite comme du C++.
+EXTENSION_MAPPING       = ino=C++
+
+# Documente aussi les éléments sans commentaire Doxygen (variables globales, enums, etc.)
+EXTRACT_ALL             = YES
+EXTRACT_STATIC          = YES
+
+JAVADOC_AUTOBRIEF       = NO
+
+GENERATE_HTML           = YES
+HTML_OUTPUT             = html
+
+GENERATE_LATEX          = NO
+GENERATE_MAN            = NO
+GENERATE_RTF            = NO
+
+HAVE_DOT                = NO
+
+QUIET                   = YES
+WARN_IF_UNDOCUMENTED    = NO

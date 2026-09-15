@@ -48,3 +48,6 @@ Desktop.ini
 *.log
 *.tmp
 *.bak
+
+# Documentation Doxygen générée (régénérée par CI, voir .github/workflows/doxygen.yml)
+doxygen-output/
