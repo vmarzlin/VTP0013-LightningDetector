@@ -7,9 +7,9 @@ PROJECT_BRIEF          = "Détecteur de foudre AS3935 (firmware Arduino, compati
 OUTPUT_LANGUAGE        = French
 OUTPUT_DIRECTORY       = doxygen-output
 
-INPUT                  = Lightning_Detector
+INPUT                  = Lightning_Detector src
 RECURSIVE              = YES
-FILE_PATTERNS          = *.ino *.h *.cpp
+FILE_PATTERNS          = *.ino *.h *.cpp *.cs
 
 # Doxygen ne reconnaît pas l'extension .ino nativement : on la traite comme du C++.
 EXTENSION_MAPPING       = ino=C++

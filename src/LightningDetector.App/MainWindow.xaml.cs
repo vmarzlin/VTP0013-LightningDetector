@@ -13,6 +13,11 @@ using System.Windows.Threading;
 
 namespace LightningDetector.App;
 
+/// <summary>
+/// Fenêtre principale de l'application : pilote la connexion série au détecteur de foudre AS3935,
+/// l'échange de commandes SCPI, l'affichage des mesures (bruit, parasites, distance, énergie) et
+/// la configuration du capteur.
+/// </summary>
 public partial class MainWindow : Window
 {
     private static readonly TimeSpan PollDeviceInterval = TimeSpan.FromSeconds(5);
@@ -53,6 +58,10 @@ public partial class MainWindow : Window
     private string _identity = string.Empty;
     private string _errorsSummary = string.Empty;
 
+    /// <summary>
+    /// Initialise la fenêtre principale, restaure les valeurs par défaut des contrôles de configuration
+    /// et prépare l'état de l'interface avant toute connexion.
+    /// </summary>
     public MainWindow()
     {
         InitializeComponent();
@@ -74,6 +83,9 @@ public partial class MainWindow : Window
         UpdateBargraphAvailability();
     }
 
+    /// <summary>
+    /// Charge la liste des ports série disponibles dans la liste déroulante et sélectionne le premier par défaut.
+    /// </summary>
     private void LoadPortNames()
     {
         var ports = SerialPort.GetPortNames();
@@ -84,6 +96,12 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Gère le clic sur le bouton Connexion/Déconnexion : ouvre le port série sélectionné et lance
+    /// l'identification de l'appareil, ou déconnecte si une connexion est déjà active.
+    /// </summary>
+    /// <param name="sender">Bouton à l'origine de l'événement.</param>
+    /// <param name="e">Données de l'événement de clic.</param>
     private async void ConnectToggleButton_Click(object sender, RoutedEventArgs e)
     {
         if (_serialPort?.IsOpen == true)
@@ -137,6 +155,9 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Ferme le port série, arrête les minuteurs de polling et réinitialise l'état de connexion de l'interface.
+    /// </summary>
     private void Disconnect()
     {
         StopPollingTimer();
@@ -164,6 +185,12 @@ public partial class MainWindow : Window
         ResetStatusUi();
     }
 
+    /// <summary>
+    /// Gestionnaire de réception de données sur le port série : accumule les octets reçus dans le tampon
+    /// et déclenche leur traitement, sauf pendant une lecture STB en cours.
+    /// </summary>
+    /// <param name="sender">Port série à l'origine de l'événement.</param>
+    /// <param name="e">Données de l'événement de réception série.</param>
     private void SerialPort_DataReceived(object sender, SerialDataReceivedEventArgs e)
     {
         try
@@ -191,6 +218,10 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Découpe le tampon de réception en lignes complètes (séparées par '\n') et transmet chacune
+    /// à la résolution de la réponse en attente.
+    /// </summary>
     private void ProcessPendingData()
     {
         var buffer = _pendingData.ToString();
@@ -220,6 +251,10 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Transmet une ligne reçue à la tâche en attente d'une réponse série, le cas échéant.
+    /// </summary>
+    /// <param name="line">Ligne reçue (sans le retour à la ligne).</param>
     private void ResolvePendingResponse(string line)
     {
         TaskCompletionSource<string?>? pending = null;
@@ -232,6 +267,10 @@ public partial class MainWindow : Window
         pending?.TrySetResult(line);
     }
 
+    /// <summary>
+    /// Interroge l'identité de l'appareil (*IDN?) avec plusieurs tentatives espacées de 500 ms en cas d'absence de réponse.
+    /// </summary>
+    /// <returns>Chaîne d'identité reçue, ou <c>null</c> si aucune réponse après le nombre maximal de tentatives.</returns>
     private async Task<string?> QueryIdentityWithRetryAsync()
     {
         const int maxAttempts = 8;
@@ -253,6 +292,10 @@ public partial class MainWindow : Window
         return null;
     }
 
+    /// <summary>
+    /// Initialise la session avec l'appareil connecté : identification, auto-test, chargement de la
+    /// configuration, puis démarrage du polling régulier.
+    /// </summary>
     private async Task InitializeDeviceAsync()
     {
         if (_serialPort is null || !_serialPort.IsOpen)
@@ -303,6 +346,10 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Interroge la configuration courante du capteur (gain AFE, seuils, état des parasites) et met à
+    /// jour les contrôles de l'interface en conséquence.
+    /// </summary>
     private async Task LoadConfigurationAsync()
     {
         if (_serialPort is null || !_serialPort.IsOpen)
@@ -349,6 +396,9 @@ public partial class MainWindow : Window
         });
     }
 
+    /// <summary>
+    /// Réinitialise le résumé des erreurs affiché et rafraîchit l'interface de configuration.
+    /// </summary>
     private void CheckStatusAndErrorsAsync()
     {
         _errorsSummary = "Aucune erreur";
@@ -363,6 +413,10 @@ public partial class MainWindow : Window
     private const double LightningEnergyMax = 2097151.0; // Valeur max 21-bit renvoyée par l'AS3935 (ENERGIE_MAX du firmware)
     private static readonly TimeSpan StormActiveWindow = TimeSpan.FromMinutes(10);
 
+    /// <summary>
+    /// Interroge périodiquement le capteur (bruit, parasites, distance, compteur d'éclairs), déclenche
+    /// la récupération des nouvelles détections et met à jour les indicateurs visuels.
+    /// </summary>
     private async Task PollDeviceAsync()
     {
         if (_serialPort is null || !_serialPort.IsOpen || _isInitializing)
@@ -429,6 +483,11 @@ public partial class MainWindow : Window
         });
     }
 
+    /// <summary>
+    /// Formate le nombre d'éclairs détectés en texte lisible ("Aucun éclair", "1 éclair", "N éclairs").
+    /// </summary>
+    /// <param name="count">Nombre d'éclairs détectés.</param>
+    /// <returns>Texte formaté.</returns>
     private static string FormatLightningCountText(int count)
     {
         if (count <= 0)
@@ -439,6 +498,10 @@ public partial class MainWindow : Window
         return count == 1 ? "1 éclair" : $"{count} éclairs";
     }
 
+    /// <summary>
+    /// Met à jour l'indicateur d'orage en cours selon que la dernière détection de foudre est plus
+    /// récente que la fenêtre d'activité de l'orage.
+    /// </summary>
     private void UpdateStormStatus()
     {
         var isStormActive = _lastLightningDetectionTime is { } lastDetection && DateTime.Now - lastDetection <= StormActiveWindow;
@@ -446,6 +509,11 @@ public partial class MainWindow : Window
         StormIcon.Fill = isStormActive ? Brushes.Orange : Brushes.Gray;
     }
 
+    /// <summary>
+    /// Anime la hauteur d'un élément (barre de niveau) vers la valeur cible.
+    /// </summary>
+    /// <param name="fillElement">Élément dont la hauteur est animée.</param>
+    /// <param name="toHeight">Hauteur cible (ramenée à 0 si négative).</param>
     private static void AnimateFillHeight(FrameworkElement fillElement, double toHeight)
     {
         var animation = new DoubleAnimation
@@ -458,9 +526,12 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Compare à la dernière mesure et met à jour la référence. Retourne null pour la toute
+    /// Compare à la dernière mesure et met à jour la référence. Retourne <c>null</c> pour la toute
     /// première mesure (pas de référence valide pour calculer une différence).
     /// </summary>
+    /// <param name="lastValue">[in,out] Dernière valeur mesurée (référence), mise à jour avec <paramref name="currentValue"/>.</param>
+    /// <param name="currentValue">Valeur mesurée courante.</param>
+    /// <returns>Différence bornée entre 0 et <see cref="LevelBarMaxValue"/>, ou <c>null</c> pour la première mesure.</returns>
     private static int? ComputeLevelDiff(ref int lastValue, int currentValue)
     {
         if (lastValue < 0)
@@ -474,6 +545,10 @@ public partial class MainWindow : Window
         return Math.Clamp(diff, 0, LevelBarMaxValue);
     }
 
+    /// <summary>
+    /// Reconstruit l'ensemble des points du graphique de foudre à partir des détections récentes
+    /// (dans la fenêtre glissante), en tenant compte de la distance et de l'énergie de chaque impact.
+    /// </summary>
     private void RefreshLightningChart()
     {
         foreach (var dot in _chartDots)
@@ -510,6 +585,13 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Crée un marqueur circulaire représentant une détection sur le graphique.
+    /// </summary>
+    /// <param name="x">Abscisse du centre du marqueur.</param>
+    /// <param name="y">Ordonnée du centre du marqueur.</param>
+    /// <param name="brush">Couleur du marqueur.</param>
+    /// <returns>Ellipse créée.</returns>
     private static Ellipse CreateDetectionDot(double x, double y, Brush brush)
     {
         var ellipse = new Ellipse
@@ -527,6 +609,10 @@ public partial class MainWindow : Window
     /// Marqueur pour un éclair à distance inconnue/infinie ou au-delà de la portée du graphique (40 km) :
     /// un triangle pointant vers le haut, positionné comme s'il était à 40 km.
     /// </summary>
+    /// <param name="x">Abscisse de référence (identique à celle utilisée pour un marqueur circulaire).</param>
+    /// <param name="y">Ordonnée de référence.</param>
+    /// <param name="brush">Couleur du marqueur.</param>
+    /// <returns>Triangle créé.</returns>
     private static Polygon CreateOutOfRangeMarker(double x, double y, Brush brush)
     {
         const double halfWidth = 4;
@@ -541,6 +627,12 @@ public partial class MainWindow : Window
         return triangle;
     }
 
+    /// <summary>
+    /// Calcule la couleur du marqueur en fonction de l'énergie de l'impact (dégradé bleu → or → rouge,
+    /// sur une échelle en racine carrée).
+    /// </summary>
+    /// <param name="energy">Énergie de l'impact, ou <c>null</c>/NaN si inconnue.</param>
+    /// <returns>Pinceau de couleur correspondant.</returns>
     private static Brush GetEnergyBrush(double? energy)
     {
         if (energy is not { } value || double.IsNaN(value))
@@ -554,6 +646,13 @@ public partial class MainWindow : Window
             : new SolidColorBrush(InterpolateColor(Colors.Gold, Colors.Red, (normalized - 0.5) / 0.5));
     }
 
+    /// <summary>
+    /// Interpole linéairement entre deux couleurs.
+    /// </summary>
+    /// <param name="from">Couleur de départ (t = 0).</param>
+    /// <param name="to">Couleur d'arrivée (t = 1).</param>
+    /// <param name="t">Facteur d'interpolation, ramené entre 0 et 1.</param>
+    /// <returns>Couleur interpolée.</returns>
     private static Color InterpolateColor(Color from, Color to, double t)
     {
         t = Math.Clamp(t, 0, 1);
@@ -563,6 +662,10 @@ public partial class MainWindow : Window
             (byte)(from.B + ((to.B - from.B) * t)));
     }
 
+    /// <summary>
+    /// Ajoute une nouvelle détection à la liste à partir de la réponse SCPI ":FETCh:ENERgy?;DISTance?".
+    /// </summary>
+    /// <param name="payload">Réponse brute du capteur ("énergie;distance"), ou <c>null</c>/vide si absente.</param>
     private void AddDetection(string? payload)
     {
         if (string.IsNullOrWhiteSpace(payload))
@@ -590,11 +693,21 @@ public partial class MainWindow : Window
     private const double SensorNaNSentinel = 9.91e37;
     private const double SensorInfinitySentinel = 9.90e37;
 
+    /// <summary>
+    /// Interprète une valeur numérique du capteur, en tenant compte des sentinelles NaN/infini.
+    /// </summary>
+    /// <param name="value">Chaîne à interpréter.</param>
+    /// <returns>Valeur obtenue, ou <c>null</c> si non interprétable.</returns>
     private static double? ParseNullableDouble(string? value)
     {
         return ParseSensorValue(value);
     }
 
+    /// <summary>
+    /// Interprète une distance renvoyée par le capteur (en mètres) et la convertit en kilomètres.
+    /// </summary>
+    /// <param name="metersText">Distance en mètres au format texte (ou "INF").</param>
+    /// <returns>Distance en kilomètres, ou <c>null</c> si non interprétable.</returns>
     private static double? ParseDistanceKm(string? metersText)
     {
         if (string.IsNullOrWhiteSpace(metersText))
@@ -611,6 +724,12 @@ public partial class MainWindow : Window
         return ParseSensorValue(trimmed) is { } meters ? meters / 1000.0 : null;
     }
 
+    /// <summary>
+    /// Interprète une valeur flottante brute du capteur en tenant compte des sentinelles NaN (9.91E+37)
+    /// et infini (9.90E+37).
+    /// </summary>
+    /// <param name="value">Chaîne à interpréter.</param>
+    /// <returns>Valeur obtenue, ou <c>null</c> si non interprétable.</returns>
     private static double? ParseSensorValue(string? value)
     {
         if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var result))
@@ -631,6 +750,13 @@ public partial class MainWindow : Window
         return result;
     }
 
+    /// <summary>
+    /// Envoie une commande SCPI sur le port série et attend sa réponse (une ligne), avec expiration du délai.
+    /// </summary>
+    /// <param name="command">Commande SCPI à envoyer.</param>
+    /// <param name="timeoutMs">Délai maximal d'attente de la réponse, en millisecondes.</param>
+    /// <param name="shouldLog">Si <c>true</c>, journalise la commande envoyée et la réponse reçue dans la zone de sortie brute.</param>
+    /// <returns>Réponse reçue, ou <c>null</c> en l'absence de port ouvert ou en cas de délai dépassé.</returns>
     private async Task<string?> SendCommandAsync(string command, int timeoutMs, bool shouldLog = false)
     {
         if (_serialPort is null || !_serialPort.IsOpen)
@@ -692,6 +818,12 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Envoie une commande SCPI sans attendre de réponse.
+    /// </summary>
+    /// <param name="command">Commande à envoyer.</param>
+    /// <param name="shouldLog">Si <c>true</c>, journalise la commande envoyée.</param>
+    /// <returns><c>true</c> si la commande a été envoyée avec succès.</returns>
     private async Task<bool> SendWriteCommandAsync(string command, bool shouldLog = false)
     {
         if (_serialPort is null || !_serialPort.IsOpen)
@@ -717,6 +849,10 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Démarre le minuteur d'interrogation régulière de l'appareil (bruit/distance/éclairs), sauf si le
+    /// polling est en pause ou si le port est fermé.
+    /// </summary>
     private void StartPollingTimer()
     {
         if (_isPollingPaused || _serialPort is null || !_serialPort.IsOpen)
@@ -743,12 +879,18 @@ public partial class MainWindow : Window
         _pollingTimer.Start();
     }
 
+    /// <summary>
+    /// Arrête le minuteur d'interrogation régulière de l'appareil.
+    /// </summary>
     private void StopPollingTimer()
     {
         _pollingTimer?.Stop();
         _pollingTimer = null;
     }
 
+    /// <summary>
+    /// Met à jour l'affichage du statut du module (résultat de l'auto-test, identité) et de la configuration.
+    /// </summary>
     private void UpdateStatusUi()
     {
         Dispatcher.Invoke(() =>
@@ -773,6 +915,9 @@ public partial class MainWindow : Window
         });
     }
 
+    /// <summary>
+    /// Point d'extension pour rafraîchir l'affichage lié à la configuration (actuellement sans effet).
+    /// </summary>
     private void UpdateConfigurationUi()
     {
         Dispatcher.Invoke(() =>
@@ -780,6 +925,10 @@ public partial class MainWindow : Window
         });
     }
 
+    /// <summary>
+    /// Réinitialise l'état de la session courante (historique, détections, statistiques, affichage)
+    /// lors d'une nouvelle connexion.
+    /// </summary>
     private void ResetSessionState()
     {
         _pendingData.Clear();
@@ -814,6 +963,9 @@ public partial class MainWindow : Window
         ResetStatusUi();
     }
 
+    /// <summary>
+    /// Réinitialise l'affichage du statut à l'état "Non connecté".
+    /// </summary>
     private void ResetStatusUi()
     {
         ModuleStatusText.Text = "Non connecté";
@@ -822,6 +974,10 @@ public partial class MainWindow : Window
         RawOutputTextBox.Text = "Aucune donnée reçue pour le moment.";
     }
 
+    /// <summary>
+    /// Ajoute une ligne de texte à la zone de sortie brute et fait défiler jusqu'à la fin.
+    /// </summary>
+    /// <param name="message">Message à ajouter.</param>
     private void AppendRaw(string message)
     {
         Dispatcher.Invoke(() =>
@@ -831,6 +987,9 @@ public partial class MainWindow : Window
         });
     }
 
+    /// <summary>
+    /// Met à jour l'état activé/libellé du bouton Pause/Reprendre selon l'état de connexion et de pause.
+    /// </summary>
     private void UpdatePauseButtonState()
     {
         Dispatcher.Invoke(() =>
@@ -840,6 +999,9 @@ public partial class MainWindow : Window
         });
     }
 
+    /// <summary>
+    /// Active ou désactive l'ensemble des contrôles de l'interface dont la disponibilité dépend de l'état de connexion.
+    /// </summary>
     private void UpdateConnectionDependentUi()
     {
         var isConnected = _serialPort is { IsOpen: true };
@@ -873,6 +1035,12 @@ public partial class MainWindow : Window
         });
     }
 
+    /// <summary>
+    /// Gère le changement d'intervalle du polling série automatique (lecture du STB) et redémarre le
+    /// minuteur correspondant s'il est actif.
+    /// </summary>
+    /// <param name="sender">Liste déroulante à l'origine de l'événement.</param>
+    /// <param name="e">Données de l'événement de sélection.</param>
     private void SerialPollingIntervalComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (SerialPollingIntervalComboBox.SelectedItem is ComboBoxItem item && item.Content is string text)
@@ -897,6 +1065,11 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Gère le clic sur le bouton d'activation/désactivation du polling série automatique du registre STB.
+    /// </summary>
+    /// <param name="sender">Bouton à l'origine de l'événement.</param>
+    /// <param name="e">Données de l'événement de clic.</param>
     private async void ToggleSerialPollingButton_Click(object sender, RoutedEventArgs e)
     {
         if (_isSerialPollingEnabled)
@@ -910,6 +1083,10 @@ public partial class MainWindow : Window
         await EnableSerialPollingAsync();
     }
 
+    /// <summary>
+    /// Active le polling série automatique du registre STB et effectue une première lecture immédiate
+    /// si le port est ouvert.
+    /// </summary>
     private async Task EnableSerialPollingAsync()
     {
         _isSerialPollingEnabled = true;
@@ -922,6 +1099,9 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Met à jour l'état des boutons et contrôles liés au polling série (STB, erreurs, statuts OPERation/QUEStionable).
+    /// </summary>
     private void UpdateSerialPollingButtonState()
     {
         Dispatcher.Invoke(() =>
@@ -938,6 +1118,11 @@ public partial class MainWindow : Window
         });
     }
 
+    /// <summary>
+    /// Gère le clic sur le bouton de lecture manuelle du registre STB (Serial Poll).
+    /// </summary>
+    /// <param name="sender">Bouton à l'origine de l'événement.</param>
+    /// <param name="e">Données de l'événement de clic.</param>
     private async void ReadStbButton_Click(object sender, RoutedEventArgs e)
     {
         if (_isSerialPollingEnabled)
@@ -960,6 +1145,9 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Démarre le minuteur de polling série automatique du registre STB, si celui-ci est activé.
+    /// </summary>
     private void StartSerialPollingTimer()
     {
         StopSerialPollingTimer();
@@ -982,12 +1170,19 @@ public partial class MainWindow : Window
         _serialPollingTimer.Start();
     }
 
+    /// <summary>
+    /// Arrête le minuteur de polling série automatique du registre STB.
+    /// </summary>
     private void StopSerialPollingTimer()
     {
         _serialPollingTimer?.Stop();
         _serialPollingTimer = null;
     }
 
+    /// <summary>
+    /// Effectue un Serial Poll (0x98) et lit le registre STB retourné par l'appareil (encadré par les
+    /// octets 0x18/0x19), puis met à jour les indicateurs visuels correspondants.
+    /// </summary>
     private async Task PollStatusByteAsync()
     {
         if (_serialPort is null || !_serialPort.IsOpen)
@@ -1053,6 +1248,12 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Attend et lit un octet disponible sur le port série, avec expiration du délai.
+    /// </summary>
+    /// <param name="timeoutMs">Délai maximal d'attente, en millisecondes.</param>
+    /// <returns>Octet lu.</returns>
+    /// <exception cref="TimeoutException">Le délai est dépassé, ou le port se ferme pendant l'attente.</exception>
     private async Task<int> ReadSerialByteAsync(int timeoutMs)
     {
         var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
@@ -1074,6 +1275,10 @@ public partial class MainWindow : Window
         throw new TimeoutException("Temps d'attente dépassé pour le polling STB.");
     }
 
+    /// <summary>
+    /// Met à jour la couleur de chaque indicateur (LED) représentant un bit du registre STB.
+    /// </summary>
+    /// <param name="stbValue">Valeur du registre STB (0-255).</param>
     private void UpdateStbLeds(int stbValue)
     {
         Dispatcher.Invoke(() =>
@@ -1097,6 +1302,9 @@ public partial class MainWindow : Window
         });
     }
 
+    /// <summary>
+    /// Réinitialise l'état du polling série automatique (désactivé, intervalle par défaut, indicateurs éteints).
+    /// </summary>
     private void ResetSerialPollingState()
     {
         _isSerialPollingEnabled = false;
@@ -1106,6 +1314,11 @@ public partial class MainWindow : Window
         UpdateSerialPollingButtonState();
     }
 
+    /// <summary>
+    /// Gère le changement de sélection d'une liste déroulante de configuration et applique la nouvelle valeur à l'appareil.
+    /// </summary>
+    /// <param name="sender">Liste déroulante à l'origine de l'événement.</param>
+    /// <param name="e">Données de l'événement de sélection.</param>
     private async void ConfigurationComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_suppressConfigurationUpdates || _isApplyingConfiguration || _serialPort is null || !_serialPort.IsOpen)
@@ -1116,6 +1329,11 @@ public partial class MainWindow : Window
         await ApplyChangedConfigurationAsync(sender as FrameworkElement);
     }
 
+    /// <summary>
+    /// Gère le changement d'état d'une case à cocher de configuration et applique la nouvelle valeur à l'appareil.
+    /// </summary>
+    /// <param name="sender">Case à cocher à l'origine de l'événement.</param>
+    /// <param name="e">Données de l'événement.</param>
     private async void ConfigurationCheckBox_Checked(object sender, RoutedEventArgs e)
     {
         UpdateBargraphAvailability();
@@ -1128,6 +1346,10 @@ public partial class MainWindow : Window
         await ApplyChangedConfigurationAsync(sender as FrameworkElement);
     }
 
+    /// <summary>
+    /// Met à jour la visibilité des messages d'indisponibilité et réinitialise les barres de niveau
+    /// bruit/parasites selon l'état de connexion et la configuration.
+    /// </summary>
     private void UpdateBargraphAvailability()
     {
         var isConnected = _serialPort is { IsOpen: true };
@@ -1150,6 +1372,11 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Détermine, à partir du contrôle modifié, quelle commande SCPI de configuration envoyer à
+    /// l'appareil, puis l'applique et vérifie sa prise en compte.
+    /// </summary>
+    /// <param name="changedControl">Contrôle de l'interface dont la valeur a changé.</param>
     private async Task ApplyChangedConfigurationAsync(FrameworkElement? changedControl)
     {
         if (_isApplyingConfiguration)
@@ -1218,6 +1445,12 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Envoie une commande de configuration puis vérifie par une requête que la valeur a bien été appliquée.
+    /// </summary>
+    /// <param name="commandBase">Racine de la commande SCPI (sans le '?').</param>
+    /// <param name="value">Valeur à appliquer.</param>
+    /// <returns>Valeur normalisée effectivement confirmée par l'appareil, ou <c>null</c> en cas d'échec d'envoi ou de vérification.</returns>
     private async Task<string?> ApplyConfigurationValueAsync(string commandBase, string value)
     {
         var command = $"{commandBase} {value}";
@@ -1248,6 +1481,11 @@ public partial class MainWindow : Window
         return normalizedValue;
     }
 
+    /// <summary>
+    /// Répercute dans les contrôles de l'interface la valeur de configuration confirmée par l'appareil.
+    /// </summary>
+    /// <param name="commandBase">Racine de la commande SCPI concernée.</param>
+    /// <param name="value">Valeur confirmée à afficher (ignorée si vide).</param>
     private async Task ApplyConfigurationValueToUiAsync(string commandBase, string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -1294,6 +1532,13 @@ public partial class MainWindow : Window
         });
     }
 
+    /// <summary>
+    /// Normalise une valeur de configuration pour comparaison, selon la commande concernée
+    /// (ex: IND/OUT pour le gain AFE).
+    /// </summary>
+    /// <param name="commandBase">Racine de la commande SCPI concernée.</param>
+    /// <param name="value">Valeur à normaliser.</param>
+    /// <returns>Valeur normalisée.</returns>
     private static string NormalizeVerificationValue(string commandBase, string? value)
     {
         var normalized = NormalizeValue(value);
@@ -1316,11 +1561,21 @@ public partial class MainWindow : Window
         };
     }
 
+    /// <summary>
+    /// Retourne le texte de l'élément actuellement sélectionné dans une liste déroulante.
+    /// </summary>
+    /// <param name="comboBox">Liste déroulante concernée.</param>
+    /// <returns>Texte de l'élément sélectionné, ou chaîne vide si aucun.</returns>
     private static string GetSelectedComboBoxValue(ComboBox comboBox)
     {
         return comboBox.SelectedItem is ComboBoxItem item ? item.Content?.ToString() ?? string.Empty : string.Empty;
     }
 
+    /// <summary>
+    /// Gère le clic sur le bouton Pause/Reprendre de l'interrogation régulière de l'appareil.
+    /// </summary>
+    /// <param name="sender">Bouton à l'origine de l'événement.</param>
+    /// <param name="e">Données de l'événement de clic.</param>
     private void PauseResumeButton_Click(object sender, RoutedEventArgs e)
     {
         if (_serialPort is null || !_serialPort.IsOpen)
@@ -1343,6 +1598,11 @@ public partial class MainWindow : Window
         UpdatePauseButtonState();
     }
 
+    /// <summary>
+    /// Gère le clic sur le bouton de rechargement de la configuration depuis l'appareil.
+    /// </summary>
+    /// <param name="sender">Bouton à l'origine de l'événement.</param>
+    /// <param name="e">Données de l'événement de clic.</param>
     private async void ReloadConfigurationButton_Click(object sender, RoutedEventArgs e)
     {
         if (_serialPort is null || !_serialPort.IsOpen)
@@ -1353,6 +1613,11 @@ public partial class MainWindow : Window
         await LoadConfigurationAsync();
     }
 
+    /// <summary>
+    /// Gère le clic sur le bouton de réinitialisation (*RST) de l'appareil, puis recharge la configuration.
+    /// </summary>
+    /// <param name="sender">Bouton à l'origine de l'événement.</param>
+    /// <param name="e">Données de l'événement de clic.</param>
     private async void ResetConfigurationButton_Click(object sender, RoutedEventArgs e)
     {
         if (_serialPort is null || !_serialPort.IsOpen)
@@ -1370,6 +1635,12 @@ public partial class MainWindow : Window
         await LoadConfigurationAsync();
     }
 
+    /// <summary>
+    /// Gère le clic sur le bouton de rappel (*RCL) d'un emplacement de configuration sauvegardé, puis
+    /// recharge la configuration.
+    /// </summary>
+    /// <param name="sender">Bouton à l'origine de l'événement.</param>
+    /// <param name="e">Données de l'événement de clic.</param>
     private async void RecallConfigurationButton_Click(object sender, RoutedEventArgs e)
     {
         if (_serialPort is null || !_serialPort.IsOpen)
@@ -1393,6 +1664,11 @@ public partial class MainWindow : Window
         await LoadConfigurationAsync();
     }
 
+    /// <summary>
+    /// Gère le clic sur le bouton de sauvegarde (*SAV) de la configuration courante dans l'emplacement sélectionné.
+    /// </summary>
+    /// <param name="sender">Bouton à l'origine de l'événement.</param>
+    /// <param name="e">Données de l'événement de clic.</param>
     private async void SaveConfigurationButton_Click(object sender, RoutedEventArgs e)
     {
         if (_serialPort is null || !_serialPort.IsOpen)
@@ -1414,11 +1690,21 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Indique si une commande SCPI est une requête (contient '?') et attend donc une réponse.
+    /// </summary>
+    /// <param name="command">Commande à analyser.</param>
+    /// <returns><c>true</c> si la commande est une requête.</returns>
     private static bool ExpectsResponse(string command)
     {
         return command.Contains('?', StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Vérifie que la chaîne d'identité (*IDN?) correspond bien à un Lightning Detector ValTronix.
+    /// </summary>
+    /// <param name="identity">Chaîne d'identité reçue.</param>
+    /// <returns><c>true</c> si l'identité est reconnue.</returns>
     private static bool IsValidIdentity(string identity)
     {
         var fields = identity.Split(',', StringSplitOptions.TrimEntries);
@@ -1427,6 +1713,11 @@ public partial class MainWindow : Window
             && string.Equals(fields[1], "LightningDetector", StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Normalise la réponse de gain AFE (IND/OUT) reçue de l'appareil.
+    /// </summary>
+    /// <param name="value">Valeur brute reçue.</param>
+    /// <returns>Valeur normalisée ("IND", "OUT" ou "?" si absente).</returns>
     private static string NormalizeAfeResponse(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -1442,6 +1733,11 @@ public partial class MainWindow : Window
         };
     }
 
+    /// <summary>
+    /// Normalise une valeur numérique reçue de l'appareil en retirant le signe '+' explicite.
+    /// </summary>
+    /// <param name="value">Valeur brute reçue.</param>
+    /// <returns>Valeur normalisée, ou "?" si absente.</returns>
     private static string NormalizeValue(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -1453,6 +1749,11 @@ public partial class MainWindow : Window
         return trimmed.StartsWith('+') ? trimmed[1..] : trimmed;
     }
 
+    /// <summary>
+    /// Normalise une réponse booléenne SCPI en "0" ou "1".
+    /// </summary>
+    /// <param name="value">Valeur brute reçue.</param>
+    /// <returns>"1", "0", ou "0" par défaut si absente/invalide.</returns>
     private static string NormalizeBooleanResponse(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -1474,6 +1775,11 @@ public partial class MainWindow : Window
         };
     }
 
+    /// <summary>
+    /// Formate le texte résumant les erreurs de l'appareil pour l'affichage.
+    /// </summary>
+    /// <param name="errors">Texte brut des erreurs, ou <c>null</c>/vide.</param>
+    /// <returns>Texte formaté ("Aucune erreur" si vide).</returns>
     private static string FormatErrors(string? errors)
     {
         if (string.IsNullOrWhiteSpace(errors))
@@ -1484,6 +1790,12 @@ public partial class MainWindow : Window
         return errors.Trim();
     }
 
+    /// <summary>
+    /// Sélectionne dans une liste déroulante l'élément dont le texte correspond à la valeur donnée
+    /// (insensible à la casse), ou le premier élément à défaut.
+    /// </summary>
+    /// <param name="comboBox">Liste déroulante concernée.</param>
+    /// <param name="value">Valeur à sélectionner.</param>
     private void SelectComboBoxValue(ComboBox comboBox, string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -1506,6 +1818,12 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Réinitialise l'état de navigation dans l'historique des commandes manuelles lorsque l'utilisateur
+    /// modifie le texte directement.
+    /// </summary>
+    /// <param name="sender">Champ de texte à l'origine de l'événement.</param>
+    /// <param name="e">Données de l'événement de changement de texte.</param>
     private void ManualCommandTextBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         if (_isApplyingHistorySelection)
@@ -1517,6 +1835,10 @@ public partial class MainWindow : Window
         _manualCommandHistoryPrefix = null;
     }
 
+    /// <summary>
+    /// Affiche une commande de l'historique dans le champ de saisie manuelle, curseur placé en fin de texte.
+    /// </summary>
+    /// <param name="command">Commande à afficher.</param>
     private void ApplyHistorySelection(string command)
     {
         _isApplyingHistorySelection = true;
@@ -1531,12 +1853,22 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Retourne la portion de texte du champ de commande manuelle située avant la position du curseur.
+    /// </summary>
+    /// <returns>Préfixe avant le curseur.</returns>
     private string GetPrefixBeforeCursor()
     {
         var caretIndex = Math.Max(0, Math.Min(ManualCommandTextBox.Text?.Length ?? 0, ManualCommandTextBox.SelectionStart));
         return ManualCommandTextBox.Text?.Substring(0, caretIndex) ?? string.Empty;
     }
 
+    /// <summary>
+    /// Navigue dans l'historique des commandes manuelles (haut/bas), en ne proposant que les commandes
+    /// correspondant au préfixe figé au début de la navigation.
+    /// </summary>
+    /// <param name="moveUp"><c>true</c> pour remonter dans l'historique (plus ancien), <c>false</c> pour descendre (plus récent).</param>
+    /// <returns><c>true</c> si une commande de l'historique a été appliquée.</returns>
     private bool TryNavigateHistory(bool moveUp)
     {
         if (_manualCommandHistory.Count == 0)
@@ -1592,6 +1924,11 @@ public partial class MainWindow : Window
         return false;
     }
 
+    /// <summary>
+    /// Intercepte les touches Haut/Bas du champ de commande manuelle pour naviguer dans l'historique.
+    /// </summary>
+    /// <param name="sender">Champ de texte à l'origine de l'événement.</param>
+    /// <param name="e">Données de l'événement clavier.</param>
     private void ManualCommandTextBox_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Up)
@@ -1613,6 +1950,11 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Gère la touche Entrée dans le champ de commande manuelle pour exécuter la commande saisie.
+    /// </summary>
+    /// <param name="sender">Champ de texte à l'origine de l'événement.</param>
+    /// <param name="e">Données de l'événement clavier.</param>
     private async void ManualCommandTextBox_KeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key != Key.Enter)
@@ -1630,6 +1972,12 @@ public partial class MainWindow : Window
         await ExecuteManualCommandAsync(command);
     }
 
+    /// <summary>
+    /// Gère le clic sur un bouton de commande rapide prédéfinie et exécute la commande associée
+    /// (stockée dans sa propriété <c>Tag</c>).
+    /// </summary>
+    /// <param name="sender">Bouton à l'origine de l'événement.</param>
+    /// <param name="e">Données de l'événement de clic.</param>
     private async void ManualQuickCommandButton_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button button)
@@ -1646,6 +1994,11 @@ public partial class MainWindow : Window
         await ExecuteManualCommandAsync(command);
     }
 
+    /// <summary>
+    /// Exécute une commande manuelle : l'ajoute à l'historique, l'envoie sur le port série (avec attente
+    /// de réponse si c'est une requête), et journalise le résultat.
+    /// </summary>
+    /// <param name="command">Commande à exécuter.</param>
     private async Task ExecuteManualCommandAsync(string command)
     {
         if (string.IsNullOrWhiteSpace(command) || _serialPort is null || !_serialPort.IsOpen)
@@ -1691,14 +2044,24 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Représente une ligne de la liste des détections (éclair, parasite) affichée dans la grille de l'interface.
+    /// </summary>
     public class DetectionRow
     {
+        /// <summary>Horodatage local de la détection.</summary>
         public DateTime Timestamp { get; init; }
+
+        /// <summary>Distance estimée de l'orage, en kilomètres (NaN si inconnue, +infini si hors de portée).</summary>
         public double? DistanceKm { get; init; }
+
+        /// <summary>Énergie brute de l'impact renvoyée par le capteur.</summary>
         public double? Energy { get; init; }
 
+        /// <summary>Horodatage formaté pour l'affichage ("yyyy-MM-dd HH:mm:ss").</summary>
         public string TimestampText => Timestamp.ToString("yyyy-MM-dd HH:mm:ss");
 
+        /// <summary>Distance formatée pour l'affichage ("NAN" si inconnue, "∞" si hors de portée).</summary>
         public string DistanceKmText
         {
             get
@@ -1712,6 +2075,7 @@ public partial class MainWindow : Window
             }
         }
 
+        /// <summary>Énergie formatée pour l'affichage ("NAN" si inconnue).</summary>
         public string EnergyText => Energy is { } value ? value.ToString(CultureInfo.InvariantCulture) : "NAN";
     }
 }

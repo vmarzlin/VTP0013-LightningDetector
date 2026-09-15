@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'Lightning_Detector/**'
+      - 'src/**'
       - 'Doxyfile'
       - '.github/workflows/doxygen.yml'
   workflow_dispatch:
