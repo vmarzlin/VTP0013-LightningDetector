@@ -332,7 +332,10 @@ int16_t errorQueue[ERROR_QUEUE_SIZE];
 uint8_t queueHead = 0; // Indice d'écriture
 uint8_t queueTail = 0; // Indice de lecture
 uint8_t queueCount = 0; // Nombre d'erreurs en attente
-// Ajouter une erreur dans la FIFO
+/**
+ * @brief Ajoute une erreur dans la FIFO d'erreurs SCPI, émet un bip et met à jour les registres d'état associés.
+ * @param error Code d'erreur SCPI (valeur négative) à empiler.
+ */
 void pushError(int16_t error)
 {
   systemBeep();
@@ -376,7 +379,10 @@ void pushError(int16_t error)
   updateStb();
 }
 
-// Dépiler et lire la plus ancienne erreur (pour réponse à :SYST:ERR?)
+/**
+ * @brief Dépile et retourne la plus ancienne erreur de la FIFO (réponse à SYSTem:ERRor?).
+ * @return Code d'erreur dépilé, ou 0 ("No error") si la file est vide.
+ */
 int16_t popError()
 {
   if (queueCount == 0)
@@ -395,7 +401,9 @@ int16_t popError()
   return error;
 }
 
-// Vider complètement la FIFO (pour la commande *CLS)
+/**
+ * @brief Vide complètement la FIFO des erreurs (utilisé par la commande *CLS).
+ */
 void clearErrorQueue()
 {
   queueHead = 0;
@@ -408,6 +416,9 @@ void clearErrorQueue()
 }
 
 #ifdef SCPI_MAP
+/**
+ * @brief Met à jour les registres OPERation et QUEStionable selon le mapping des erreurs actuellement présentes dans la FIFO.
+ */
 void updateOperQues()
 {
   // Mettre à jour les registres OPERation et QUEStionable si un mapping correspond
@@ -504,8 +515,14 @@ bool isEnergyOvfl;
 long voltVcc;
 float temperature;
 
-// Buzzer sur D3 (OC2B) OBLIGATOIREMENT
-// Remplace tone()/noTone() en économisant beaucoup de mémoire flash
+/**
+ * @brief Démarre le buzzer passif (D3/OC2B obligatoirement) à la fréquence et pour la durée données.
+ *
+ * Remplace tone()/noTone() afin d'économiser de la mémoire Flash. L'extinction du son n'est pas
+ * bloquante : elle est effectuée dans loop() une fois le délai `buzzUntil` atteint.
+ * @param freq Fréquence du son en Hz.
+ * @param ms Durée du son en millisecondes.
+ */
 static void buzz(uint16_t freq, uint16_t ms)
 {
 #ifdef BUZZER_OC2B
@@ -529,11 +546,17 @@ static void buzz(uint16_t freq, uint16_t ms)
   buzzActive = true;
 }
 
+/**
+ * @brief Émet un bref bip système si le buzzer est activé (utilisé notamment par pushError()).
+ */
 void systemBeep()
 {
   if (buzzerEnabled) buzz(buzzerFrequency, buzzerDuration);
 }
 
+/**
+ * @brief Réinitialise les réglages du buzzer et du capteur AS3935 à leurs valeurs par défaut (commande *RST).
+ */
 void resetSettings()
 { // *RST
   buzzerEnabled = buzzerStateDefault;
@@ -542,6 +565,10 @@ void resetSettings()
   if (isAs3935Available) lightning.resetSettings();
 }
 
+/**
+ * @brief Réinitialise un registre SCPI (CONDition, EVENt, PTRansition, NTRansition, MAP) à son état par défaut.
+ * @param r Registre SCPI à réinitialiser.
+ */
 void regPreset(ScpiRegister &r)
 {
   r.ena = ((r.ena & 0x8000) == 0)?0x0000:0xFFFF;
@@ -558,6 +585,11 @@ void regPreset(ScpiRegister &r)
 #endif
 }
 
+/**
+ * @brief Positionne un bit du registre CONDition et propage l'événement vers EVENt en cas de transition 0→1 autorisée par PTR.
+ * @param r Registre SCPI concerné.
+ * @param bit Indice du bit (0-14) à positionner.
+ */
 void regBitSet(ScpiRegister &r, uint8_t bit)
 {
   if (bit < 15)
@@ -572,6 +604,11 @@ void regBitSet(ScpiRegister &r, uint8_t bit)
   }
 }
 
+/**
+ * @brief Efface un bit du registre CONDition et propage l'événement vers EVENt en cas de transition 1→0 autorisée par NTR.
+ * @param r Registre SCPI concerné.
+ * @param bit Indice du bit (0-14) à effacer.
+ */
 void regBitClear(ScpiRegister &r, uint8_t bit)
 {
   if (bit < 15)
@@ -586,6 +623,12 @@ void regBitClear(ScpiRegister &r, uint8_t bit)
   }
 }
 
+/**
+ * @brief Positionne ou efface un bit du registre CONDition selon la valeur donnée (appelle regBitSet() ou regBitClear()).
+ * @param r Registre SCPI concerné.
+ * @param bit Indice du bit (0-14) à écrire.
+ * @param value État à écrire (true = positionner, false = effacer).
+ */
 void regBitWrite(ScpiRegister &r, uint8_t bit, bool value)
 {
   if (value)
@@ -598,11 +641,19 @@ void regBitWrite(ScpiRegister &r, uint8_t bit, bool value)
   }
 }
 
+/**
+ * @brief Indique si au moins un bit actif du registre EVENt est autorisé par ENABle (cascade du registre).
+ * @param r Registre SCPI à évaluer.
+ * @return true si le registre doit remonter un état actif vers son parent.
+ */
 bool regCascade(ScpiRegister &r)
 {
   return (r.eve & (r.ena & 0x7FFF)) != 0x0000;
 }
 
+/**
+ * @brief Efface les registres EVENt de tous les registres SCPI ainsi que l'ESR (commande *CLS).
+ */
 void regClearEvents()
 {
   operReg.eve = 0x0000;
@@ -616,6 +667,9 @@ void regClearEvents()
   updateStb();
 }
 
+/**
+ * @brief Réinitialise tous les registres SCPI de l'appareil à leur état par défaut.
+ */
 void regPresetAll()
 {
   regPreset(operReg);
@@ -628,11 +682,19 @@ void regPresetAll()
   updateStb();
 }
 
+/**
+ * @brief Recalcule l'état cascadé du registre OPERation.
+ * @return true si OPERation doit être signalé actif dans le Status Byte.
+ */
 bool updateOper()
 {
   return regCascade(operReg);
 }
 
+/**
+ * @brief Met à jour les bits de synthèse de QUEStionable (VOLTage, TIME, TEMPerature, CALibration, LIGHtning) puis recalcule son état cascadé.
+ * @return true si QUEStionable doit être signalé actif dans le Status Byte.
+ */
 bool updateQues()
 {
   regBitWrite(quesReg, QUES_VOLT, regCascade(voltReg));
@@ -643,6 +705,10 @@ bool updateQues()
   return regCascade(quesReg);
 }
 
+/**
+ * @brief Recalcule entièrement le registre STB (Status Byte) à partir de la file d'erreurs, des registres
+ * QUEStionable/OPERation, de l'état du buffer de sortie série et des masques ESE/SRE.
+ */
 void updateStb()
 {
   // Les bit 0 et 1 sont spécifiques / non utilisés
@@ -670,10 +736,16 @@ void updateStb()
   bitWrite(scpiStb, 6, scpiStb & (scpiSre & ~(1 << 6))); // Doit être calculé en dernier car dépend des autres
 }
 
-// Parse CONDition/ENABle/EVENt/MAP/PTRansition/NTRansition pour un registre SCPI
-// générique (OPERation, QUEStionable, QUEStionable:LIGHtning, ...).
-// r.map == nullptr désactive la sous-commande MAP pour ce registre.
-// Fixe rc en conséquence (0 = ok, sinon code d'erreur SCPI).
+/**
+ * @brief Analyse et traite les sous-commandes génériques CONDition/ENABle/EVENt/MAP/PTRansition/NTRansition
+ * d'un registre SCPI (OPERation, QUEStionable, QUEStionable:LIGHtning, ...).
+ * @param r Registre SCPI ciblé (r.map == nullptr désactive la sous-commande MAP pour ce registre).
+ * @param subtoken Sous-commande courante (ex: "ENABle"), ou NULL si aucune (registre lui-même).
+ * @param isQuery true si c'est une requête (suffixe '?').
+ * @param argc Nombre d'arguments fournis.
+ * @param argv Tableau des arguments.
+ * @param rc [in,out] Code d'erreur SCPI, mis à jour en cas de problème (0 = ok). Rien n'est fait si déjà non nul en entrée.
+ */
 void parseScpiRegister(ScpiRegister &r, char *subtoken, bool isQuery, int argc, char *argv[], int16_t &rc)
 {
   if (isQuery && isToken(subtoken, F("CONDition")))
@@ -799,6 +871,10 @@ void parseScpiRegister(ScpiRegister &r, char *subtoken, bool isQuery, int argc, 
   }
 }
 
+/**
+ * @brief Réinitialise les statistiques sélectionnées (foudre, énergie, distance, parasites, bruit).
+ * @param flag Combinaison de StatFlag indiquant les catégories de statistiques à réinitialiser.
+ */
 void resetStatistics(StatFlag flag)
 {
   if (flag & STAT_LIGHTNING)
@@ -845,6 +921,10 @@ void resetStatistics(StatFlag flag)
 }
 
 #ifndef FIRMWARE_VERSION
+/**
+ * @brief Construit la date de compilation au format ISO ("YYYY-MM-DD HH:MM:SS") à partir des macros
+ * __DATE__ et __TIME__, et la stocke dans buildDateISO.
+ */
 void formatBuildDate()
 {
   const char *date = __DATE__; // "Aug  2 2026"
@@ -886,6 +966,12 @@ void formatBuildDate()
 }
 #endif
 
+/**
+ * @brief Calcule un CRC8 (polynôme 0x31) sur un bloc de données, en ignorant l'octet d'indice 1 (réservé au champ checksum).
+ * @param p Pointeur vers les données.
+ * @param n Taille des données en octets.
+ * @return Valeur du CRC8 calculé.
+ */
 uint8_t crc8(const uint8_t *p, size_t n)
 {
   uint8_t crc = 0xFF;     // valeur initiale non nulle
@@ -910,6 +996,11 @@ struct SavedPud
   char data[PUD_SIZE];  // Ne termine pas forcément par '\0'
 };
 
+/**
+ * @brief Enregistre en EEPROM les données utilisateur protégées (*PUD), après validation du format bloc IEEE 488.2.
+ * @param s Chaîne au format bloc définitif ("#<nb_chiffres><longueur><données>").
+ * @return 0 en cas de succès, sinon un code d'erreur SCPI.
+ */
 int16_t saveProtectedUsedData(const char *s)
 { // *PUD <data>
   int16_t rc;
@@ -958,6 +1049,11 @@ int16_t saveProtectedUsedData(const char *s)
   return rc;
 }
 
+/**
+ * @brief Charge depuis l'EEPROM les données utilisateur protégées et vérifie leur intégrité par CRC.
+ * @param pud [out] Structure recevant les données lues.
+ * @return 0 en cas de succès, sinon un code d'erreur SCPI.
+ */
 int16_t loadProtectedUsedData(struct SavedPud &pud)
 { // *PUD?
   int16_t rc;
@@ -975,6 +1071,11 @@ int16_t loadProtectedUsedData(struct SavedPud &pud)
 }
 #endif
 
+/**
+ * @brief Sauvegarde la configuration courante du capteur AS3935 et du buzzer dans un emplacement EEPROM (*SAV).
+ * @param slot Numéro d'emplacement (0 à SLOT_COUNT-1).
+ * @return 0 en cas de succès, sinon un code d'erreur SCPI.
+ */
 int16_t saveState(uint8_t slot)
 { // *SAV 0-(SLOT_COUNT - 1)
   SavedState s;
@@ -1017,6 +1118,11 @@ int16_t saveState(uint8_t slot)
   return rc;
 }
 
+/**
+ * @brief Restaure la configuration du capteur AS3935 et du buzzer depuis un emplacement EEPROM (*RCL).
+ * @param slot Numéro d'emplacement (0 à SLOT_COUNT-1).
+ * @return 0 en cas de succès, sinon un code d'erreur SCPI.
+ */
 int16_t recallState(uint8_t slot)
 { // *RCL 0-(SLOT_COUNT-1)
   SavedState s;
@@ -1062,6 +1168,10 @@ int16_t recallState(uint8_t slot)
 }
 
 #ifdef SCPI_PSC
+/**
+ * @brief Sauvegarde en EEPROM les masques ESE/SRE et les registres d'activation (ENABle) pour restauration au prochain démarrage.
+ * @return 0 en cas de succès, sinon un code d'erreur SCPI.
+ */
 int16_t savePowerOnStatus()
 { // *PSC = Power on Status Clear
   SavedPonStatus pos;
@@ -1089,6 +1199,10 @@ int16_t savePowerOnStatus()
   return rc;
 }
 
+/**
+ * @brief Recharge depuis l'EEPROM les masques ESE/SRE et les registres ENABle, si *PSC est à OFF.
+ * @return 0 en cas de succès, sinon un code d'erreur SCPI.
+ */
 int16_t loadPowerOnConfiguration()
 {
   SavedPonStatus pos;
@@ -1156,6 +1270,11 @@ enum : uint8_t
 };
 uint8_t sourceCal = CAL_SOUR_NONE;
 
+/**
+ * @brief Met à jour et sauvegarde en EEPROM les données de calibration (capacité d'accord, date, température), puis les recharge.
+ * @param passwdOnly Si true, seul le mot de passe est considéré modifié ; les autres données de calibration ne sont pas recalculées.
+ * @return 0 en cas de succès, sinon un code d'erreur SCPI (voir loadCalibration()).
+ */
 int16_t saveCalibration(bool passwdOnly)
 {
   cal.count++;
@@ -1181,6 +1300,11 @@ int16_t saveCalibration(bool passwdOnly)
   return loadCalibration();
 }
 
+/**
+ * @brief Charge et vérifie les données de calibration depuis l'EEPROM ; applique des valeurs par défaut
+ * "non calibré" en cas d'échec et met à jour les bits d'état QUEStionable:CALibration.
+ * @return 0 en cas de succès, sinon un code d'erreur SCPI.
+ */
 int16_t loadCalibration()
 {
   int16_t rc = 0;
@@ -1222,12 +1346,20 @@ int16_t loadCalibration()
   return rc;
 }
 
+/**
+ * @brief Écrit une valeur booléenne sur le port série au format SCPI ('0' ou '1').
+ * @param value Valeur à afficher.
+ */
 void displayBoolean(bool value)
 {
   Serial.write(value?'1':'0');
   scpiOutput = true;
 }
 
+/**
+ * @brief Écrit un entier sur le port série au format SCPI NR1 (avec signe explicite).
+ * @param value Valeur à afficher.
+ */
 void displayInteger(int32_t value)
 {
   if (value >= 0) Serial.write('+');
@@ -1235,6 +1367,10 @@ void displayInteger(int32_t value)
   scpiOutput = true;
 }
 
+/**
+ * @brief Écrit un nombre flottant sur le port série au format SCPI NR3 (mantisse + exposant, ex: +1.23456E+02).
+ * @param value Valeur à afficher.
+ */
 void displayFloat(float value)
 {
   if (value == 0.0)
@@ -1259,6 +1395,10 @@ void displayFloat(float value)
   scpiOutput = true;
 }
 
+/**
+ * @brief Décode et affiche une date compactée (format interne 16 bits) au format SCPI "année,mois,jour".
+ * @param d Date compactée à décoder et afficher.
+ */
 void displayDate(uint16_t d)
 {
   int a, m, j;
@@ -1280,6 +1420,10 @@ void displayDate(uint16_t d)
   scpiOutput = true;
 }
 
+/**
+ * @brief Décode et affiche une heure compactée (format interne 16 bits) au format SCPI "heure,minute,seconde".
+ * @param d Heure compactée à décoder et afficher.
+ */
 void displayTime(uint16_t d)
 {
   int h, m, s;
@@ -1300,6 +1444,9 @@ void displayTime(uint16_t d)
   scpiOutput = true;
 }
 
+/**
+ * @brief Lit le numéro de série stocké en EEPROM (avec vérification par complément à 1) et l'affiche en hexadécimal.
+ */
 void displaySerial()
 {
   for (size_t i = 0; i < 8; i++)
@@ -1323,6 +1470,11 @@ void displaySerial()
   scpiOutput = true;
 }
 
+/**
+ * @brief Affiche une chaîne entre guillemets au format SCPI, en doublant les guillemets internes.
+ * @param s Chaîne à afficher (peut ne pas être terminée par '\0').
+ * @param l Longueur maximale à afficher.
+ */
 void displayString(const char* s, int l)
 {
   Serial.write('"');
@@ -1336,6 +1488,11 @@ void displayString(const char* s, int l)
   scpiOutput = true;
 }
 
+/**
+ * @brief Affiche des données binaires au format bloc définitif IEEE 488.2 ("#<n><longueur><données>").
+ * @param data Pointeur vers les données binaires.
+ * @param len Longueur des données en octets.
+ */
 void displayBlock(const uint8_t* data, uint16_t len)
 {
   char header[7];
@@ -1353,26 +1510,42 @@ void displayBlock(const uint8_t* data, uint16_t len)
   scpiOutput = true;
 }
 
+/**
+ * @brief Écrit un séparateur ';' avant une nouvelle valeur de réponse, si une valeur a déjà été affichée.
+ */
 void displaySeparator()
 {
   if (scpiOutput) Serial.write(';');
 }
 
+/**
+ * @brief Affiche la valeur spéciale "Not a Number" (SCPI_NAN) au format flottant.
+ */
 void displayNaN()
 {
   displayFloat(SCPI_NAN);
 }
 
+/**
+ * @brief Affiche la valeur spéciale infini positif (SCPI_PINFINITY) au format flottant.
+ */
 void displayPInfinity()
 {
   displayFloat(SCPI_PINFINITY);
 }
 
+/**
+ * @brief Affiche la valeur spéciale infini négatif (SCPI_NINFINITY) au format flottant.
+ */
 void displayNInfinity()
 {
   displayFloat(SCPI_NINFINITY);
 }
 
+/**
+ * @brief Affiche un code d'erreur SCPI suivi de son libellé textuel : "<code>,\"<message>\"" (réponse à SYSTem:ERRor?).
+ * @param error Code d'erreur SCPI à afficher.
+ */
 void displayError(int16_t error)
 {
   displayInteger(error);
@@ -1494,6 +1667,11 @@ void displayError(int16_t error)
   scpiOutput = true;
 }
 
+/**
+ * @brief Effectue l'auto-calibration des oscillateurs internes du capteur AS3935 et met à jour les bits d'état de calibration (*CAL?).
+ * @param calibrationResult [out] Octet de résultat détaillant l'état des oscillateurs TRCO/SRCO.
+ * @return 0 en cas de succès, sinon -340 (Calibration failed).
+ */
 uint16_t selfCalibration(uint8_t &calibrationResult)
 { // *CAL?
   calibrationResult = 0x00;
@@ -1520,6 +1698,10 @@ uint16_t selfCalibration(uint8_t &calibrationResult)
   return  (calibrationResult == 0)?0:-340; // Calibration failed
 }
 
+/**
+ * @brief Indique si la restauration de la calibration a échoué au démarrage (utilisé par le POST).
+ * @return true en cas d'échec (implémentation actuelle : toujours false).
+ */
 bool isRestoreCalibrationFail()
 {
   size_t addr = CALI_BASE;
@@ -1527,6 +1709,10 @@ bool isRestoreCalibrationFail()
   return false;
 }
 
+/**
+ * @brief Exécute les vérifications du POST (Power On Self Test) et empile les erreurs correspondantes.
+ * @return true si au moins un test du POST a échoué.
+ */
 bool isPostFail()
 {
   bool fail = false;
@@ -1538,6 +1724,11 @@ bool isPostFail()
   return fail;
 }
 
+/**
+ * @brief Exécute l'auto-test de l'appareil (*TST?) et construit bit à bit l'octet de résultat selon les sous-systèmes testés.
+ * @param testResult [out] Octet de résultat détaillant les échecs par sous-système.
+ * @return 0 en cas de succès, sinon -330 (Self-test failed).
+ */
 int16_t autoTest(uint8_t &testResult)
 { // *TST?
   testResult = 0x00;
@@ -1560,11 +1751,22 @@ int16_t autoTest(uint8_t &testResult)
   return (testResult == 0)?0:-330; // Self-test failed
 }
 
+/**
+ * @brief Retourne le prochain jeton (segment d'en-tête SCPI) en poursuivant l'analyse strtok() sur les ':'.
+ * @return Pointeur vers le prochain jeton, ou NULL s'il n'y en a plus.
+ */
 char *nextToken()
 {
   return strtok(NULL, ":");
 }
 
+/**
+ * @brief Compare une chaîne reçue à un mnémonique SCPI de référence stocké en Flash, en acceptant sa forme
+ * courte (majuscules du mnémonique) ou sa forme longue complète.
+ * @param s Chaîne à comparer (mnémonique reçu), insensible à la casse.
+ * @param tokenF Mnémonique de référence complet, stocké en Flash (ex: F("LIGHtning")).
+ * @return true si `s` correspond à la forme courte ou longue de `tokenF`.
+ */
 bool isToken(const char *s, const __FlashStringHelper *tokenF)
 {
   if (s == NULL)
@@ -1609,76 +1811,152 @@ bool isToken(const char *s, const __FlashStringHelper *tokenF)
   return isThisOne;
 }
 
+/**
+ * @brief Indique si la chaîne correspond au mot-clé SCPI DEFault.
+ * @param s Chaîne à tester.
+ * @return true si `s` correspond à DEFault.
+ */
 bool isDefault(const char *s)
 {
   return isToken(s, F("DEFault"));
 }
 
+/**
+ * @brief Indique si la chaîne correspond au mot-clé SCPI MINimum.
+ * @param s Chaîne à tester.
+ * @return true si `s` correspond à MINimum.
+ */
 bool isMinimum(const char *s)
 {
   return isToken(s, F("MINimum"));
 }
 
+/**
+ * @brief Indique si la chaîne correspond au mot-clé SCPI AVERage.
+ * @param s Chaîne à tester.
+ * @return true si `s` correspond à AVERage.
+ */
 bool isAverage(const char *s)
 {
   return isToken(s, F("AVERage"));
 }
 
+/**
+ * @brief Indique si la chaîne correspond au mot-clé SCPI MAXimum.
+ * @param s Chaîne à tester.
+ * @return true si `s` correspond à MAXimum.
+ */
 bool isMaximum(const char *s)
 {
   return isToken(s, F("MAXimum"));
 }
 
+/**
+ * @brief Indique si la chaîne correspond au mot-clé SCPI UP.
+ * @param s Chaîne à tester.
+ * @return true si `s` correspond à UP.
+ */
 bool isUp(const char *s)
 {
   return isToken(s, F("UP"));
 }
 
+/**
+ * @brief Indique si la chaîne correspond au mot-clé SCPI DOWN.
+ * @param s Chaîne à tester.
+ * @return true si `s` correspond à DOWN.
+ */
 bool isDown(const char *s)
 {
   return isToken(s, F("DOWN"));
 }
 
+/**
+ * @brief Indique si la chaîne correspond au mot-clé SCPI INFinity.
+ * @param s Chaîne à tester.
+ * @return true si `s` correspond à INFinity.
+ */
 bool isInfinity(const char *s)
 {
   return isToken(s, F("INFinity"));
 }
 
+/**
+ * @brief Indique si la chaîne correspond au mot-clé SCPI NINFinity.
+ * @param s Chaîne à tester.
+ * @return true si `s` correspond à NINFinity.
+ */
 bool isNInfinity(const char *s)
 {
   return isToken(s, F("NINFinity"));
 }
 
+/**
+ * @brief Indique si la chaîne correspond au mot-clé SCPI NAN.
+ * @param s Chaîne à tester.
+ * @return true si `s` correspond à NAN.
+ */
 bool isNan(const char *s)
 {
   return isToken(s, F("NAN"));
 }
 
+/**
+ * @brief Indique si la chaîne correspond au mot-clé SCPI CLEar.
+ * @param s Chaîne à tester.
+ * @return true si `s` correspond à CLEar.
+ */
 bool isClear(const char *s)
 {
   return isToken(s, F("CLEar"));
 }
 
+/**
+ * @brief Indique si la chaîne correspond au mot-clé SCPI COUNt.
+ * @param s Chaîne à tester.
+ * @return true si `s` correspond à COUNt.
+ */
 bool isCount(const char *s)
 {
   return isToken(s, F("COUNt"));
 }
 
+/**
+ * @brief Indique si la chaîne correspond au mot-clé SCPI STATe.
+ * @param s Chaîne à tester.
+ * @return true si `s` correspond à STATe.
+ */
 bool isState(const char *s)
 {
   return isToken(s, F("STATe"));
 }
 
+/**
+ * @brief Indique si la chaîne correspond au mot-clé SCPI THReshold.
+ * @param s Chaîne à tester.
+ * @return true si `s` correspond à THReshold.
+ */
 bool isThreshold(const char *s)
 {
   return isToken(s, F("THReshold"));
 }
 
+/**
+ * @brief Indique si la chaîne correspond au mot-clé SCPI PERCent.
+ * @param s Chaîne à tester.
+ * @return true si `s` correspond à PERCent.
+ */
 bool isPercent(const char *s)
 {
   return isToken(s, F("PERCent"));
 }
 
+/**
+ * @brief Interprète une chaîne comme une valeur booléenne SCPI (ON/OFF, ou 0/1 avec zéros de poids fort tolérés).
+ * @param s Chaîne à interpréter.
+ * @param value [out] Valeur booléenne obtenue.
+ * @return 0 en cas de succès, sinon un code d'erreur SCPI.
+ */
 int16_t isBool(const char *s, bool &value)
 {
   int16_t rc = -310; // System error
@@ -1719,6 +1997,12 @@ int16_t isBool(const char *s, bool &value)
   return isValid?0:-120;
 }
 
+/**
+ * @brief Interprète une chaîne comme un entier au format NR1 (décimal, ou octal #Q / hexadécimal #H / binaire #B, avec signe optionnel).
+ * @param s Chaîne à interpréter.
+ * @param value [out] Valeur entière obtenue.
+ * @return 0 en cas de succès, sinon un code d'erreur SCPI.
+ */
 int16_t isNR1(const char *s, int32_t &value)
 {
   int16_t rc = -310;
@@ -1816,6 +2100,12 @@ int16_t isNR1(const char *s, int32_t &value)
   return rc;
 }
 
+/**
+ * @brief Interprète une chaîne comme un nombre flottant au format NRf (mantisse avec signe et partie décimale, exposant optionnel).
+ * @param s Chaîne à interpréter.
+ * @param value [out] Valeur flottante obtenue.
+ * @return 0 en cas de succès, sinon un code d'erreur SCPI.
+ */
 int16_t isNRf(const char *s, float &value)
 {
   int16_t rc = 0;
@@ -1975,6 +2265,12 @@ int16_t isNRf(const char *s, float &value)
   return rc;
 }
 
+/**
+ * @brief Compare le nombre d'arguments reçus au nombre attendu.
+ * @param expected Nombre d'arguments attendu.
+ * @param provided Nombre d'arguments effectivement fournis.
+ * @return 0 si les comptes correspondent, -109 s'il manque des arguments, -108 s'il y en a trop.
+ */
 int16_t compareArgumentsCount(int expected, int provided)
 {
   if (provided == expected)
@@ -1991,14 +2287,19 @@ int16_t compareArgumentsCount(int expected, int provided)
   }
 }
 
-/*
- * Command: retourne la valeur parsée qui peut être la valeur par défaut
- * Requête: affiche la valeur fournie (par défaut ou non)
- * Notes:
- *  - `rc` est mis à jour en cas d'erreur
- *  - rien n'est fait si `rc` != 0 dès l'appel
-*  Retourne: `true` si la valeur doit être modifiée par le nouveau contenu de `value`.
-*/
+/**
+ * @brief Traite une commande ou requête SCPI à paramètre booléen (avec support du mot-clé DEFault).
+ *
+ * En mode commande, retourne la valeur analysée (qui peut être la valeur par défaut). En mode requête,
+ * affiche la valeur fournie (par défaut ou courante).
+ * @param isQuery true si c'est une requête (suffixe '?').
+ * @param ac Nombre d'arguments.
+ * @param av Tableau des arguments.
+ * @param defValue Valeur par défaut associée au mot-clé DEFault.
+ * @param value [in,out] Valeur courante (utilisée/affichée en requête) ; reçoit la nouvelle valeur en commande.
+ * @param rc [in,out] Code d'erreur SCPI, mis à jour en cas de problème. Rien n'est fait si déjà non nul en entrée.
+ * @return true si `value` doit être modifiée par le nouveau contenu.
+ */
 bool checkBoolean(bool isQuery, int ac, char *av[], bool defValue, bool &value, int16_t &rc)
 { // x? [DEFault] & x <boolean>|DEFault
   if (rc == 0)
@@ -2055,6 +2356,17 @@ bool checkBoolean(bool isQuery, int ac, char *av[], bool defValue, bool &value, 
   return false;
 }
 
+/**
+ * @brief Traite une commande ou requête SCPI à paramètre entier borné sur un octet (format NR1).
+ * @param isQuery true si c'est une requête (suffixe '?').
+ * @param ac Nombre d'arguments.
+ * @param av Tableau des arguments.
+ * @param min Valeur minimale autorisée.
+ * @param max Valeur maximale autorisée.
+ * @param value [in,out] Valeur courante (utilisée/affichée en requête) ; reçoit la nouvelle valeur en commande.
+ * @param rc [in,out] Code d'erreur SCPI, mis à jour en cas de problème. Rien n'est fait si déjà non nul en entrée.
+ * @return true si `value` doit être modifiée par le nouveau contenu.
+ */
 bool checkByte(bool isQuery, int ac, char*av[], const uint8_t min, const uint8_t max, uint8_t &value, int16_t &rc)
 { // x? & x <NR1>
   if (rc == 0)
@@ -2089,6 +2401,18 @@ bool checkByte(bool isQuery, int ac, char*av[], const uint8_t min, const uint8_t
   return false;
 }
 
+/**
+ * @brief Traite une commande ou requête SCPI à paramètre entier (format NR1), avec support des mots-clés MINimum/DEFault/MAXimum.
+ * @param isQuery true si c'est une requête (suffixe '?').
+ * @param ac Nombre d'arguments.
+ * @param av Tableau des arguments.
+ * @param valueMin Valeur minimale (associée au mot-clé MINimum).
+ * @param valueDef Valeur par défaut (associée au mot-clé DEFault).
+ * @param valueMax Valeur maximale (associée au mot-clé MAXimum).
+ * @param value [in,out] Valeur courante (utilisée/affichée en requête) ; reçoit la nouvelle valeur en commande.
+ * @param rc [in,out] Code d'erreur SCPI, mis à jour en cas de problème. Rien n'est fait si déjà non nul en entrée.
+ * @return true si `value` doit être modifiée par le nouveau contenu.
+ */
 bool checkInteger(bool isQuery, int ac, char* av[], int32_t valueMin, int32_t valueDef, int32_t valueMax, int32_t &value, int16_t &rc)
 { // x? [MINimum|DEFault|MAXimum] & x <NR1>|MINimum|DEFault|MAXimum
   if (rc == 0)
@@ -2168,6 +2492,18 @@ bool checkInteger(bool isQuery, int ac, char* av[], int32_t valueMin, int32_t va
   return false;
 }
 
+/**
+ * @brief Traite une commande ou requête SCPI à paramètre flottant (format NRf), avec support des mots-clés MINimum/DEFault/MAXimum.
+ * @param isQuery true si c'est une requête (suffixe '?').
+ * @param ac Nombre d'arguments.
+ * @param av Tableau des arguments.
+ * @param valueMin Valeur minimale (associée au mot-clé MINimum).
+ * @param valueDef Valeur par défaut (associée au mot-clé DEFault).
+ * @param valueMax Valeur maximale (associée au mot-clé MAXimum).
+ * @param value [in,out] Valeur courante (utilisée/affichée en requête) ; reçoit la nouvelle valeur en commande.
+ * @param rc [in,out] Code d'erreur SCPI, mis à jour en cas de problème. Rien n'est fait si déjà non nul en entrée.
+ * @return true si `value` doit être modifiée par le nouveau contenu.
+ */
 bool checkFloat(bool isQuery, int ac, char* av[], float valueMin, float valueDef, float valueMax, float &value, int16_t &rc)
 { // x? [MINimum|DEFault|MAXimum] & x <NRf>|MINimum|DEFault|MAXimum
   if (rc == 0)
@@ -2247,6 +2583,13 @@ bool checkFloat(bool isQuery, int ac, char* av[], float valueMin, float valueDef
   return false;
 }
 
+/**
+ * @brief Compacte une date (année/mois/jour) dans un mot de 16 bits (7 bits année depuis 2000, 4 bits mois, 5 bits jour).
+ * @param year Année (2000-2127).
+ * @param month Mois (1-12).
+ * @param day Jour (1-31).
+ * @return Date compactée, ou 0 si les valeurs sont hors plage.
+ */
 uint16_t dateToWord(int year, int month, int day)
 {
   if ((year < 2000) || (year > 2127) || (month < 1) || (month > 12) || (day < 1) || (day > 31))
@@ -2259,6 +2602,10 @@ uint16_t dateToWord(int year, int month, int day)
   }
 }
 
+/**
+ * @brief Lit la date courante depuis l'horloge temps réel (RTC) et la compacte au format interne 16 bits.
+ * @return Date compactée, ou 0 si le RTC n'est pas accessible.
+ */
 uint16_t currentDateToWord()
 {
   RTCTime currentTime;
@@ -2275,6 +2622,15 @@ uint16_t currentDateToWord()
   }
 }
 
+/**
+ * @brief Traite une commande ou requête SCPI portant sur une date (année, mois, jour), avec support des mots-clés MINimum/DEFault/MAXimum.
+ * @param isQuery true si c'est une requête (suffixe '?').
+ * @param ac Nombre d'arguments.
+ * @param av Tableau des arguments.
+ * @param value [in,out] Date compactée courante (utilisée/affichée en requête) ; reçoit la nouvelle date en commande.
+ * @param rc [in,out] Code d'erreur SCPI, mis à jour en cas de problème. Rien n'est fait si déjà non nul en entrée.
+ * @return true si `value` doit être modifiée par le nouveau contenu.
+ */
 bool checkDate(bool isQuery, int ac, char* av[], uint16_t &value, int16_t &rc)
 { // x? [MINimum|DEFault|MAXimum] & x <NRf>|MINimum|DEFault|MAXimum,<NRf>|MINimum|DEFault|MAXimum,<NRf>|MINimum|DEFault|MAXimum
   if (rc == 0)
@@ -2338,6 +2694,17 @@ bool checkDate(bool isQuery, int ac, char* av[], uint16_t &value, int16_t &rc)
   return false;
 }
 
+/**
+ * @brief Doit traiter une commande ou requête SCPI portant sur une heure (heure, minute, seconde), avec support
+ * des mots-clés MINimum/DEFault/MAXimum, sur le même principe que checkDate().
+ * @note Non implémentée (TODO) : le corps est actuellement vide.
+ * @param isQuery true si c'est une requête (suffixe '?').
+ * @param ac Nombre d'arguments.
+ * @param av Tableau des arguments.
+ * @param value [in,out] Heure compactée courante (utilisée/affichée en requête) ; reçoit la nouvelle heure en commande.
+ * @param rc [in,out] Code d'erreur SCPI, mis à jour en cas de problème. Rien n'est fait si déjà non nul en entrée.
+ * @return true si `value` doit être modifiée par le nouveau contenu.
+ */
 bool checkTime(bool isQuery, int ac, char* av[], uint16_t &value, int16_t &rc)
 { // x? [MINimum|DEFault|MAXimum] & x <NRf>|MINimum|DEFault|MAXimum,<NRf>|MINimum|DEFault|MAXimum,<NRf>|MINimum|DEFault|MAXimum
   // TODO
@@ -2356,6 +2723,9 @@ static uint8_t trendCount;                // remplissage courant (0..TREND_WINDO
 static uint8_t trendIndex;                // position d'ecriture circulaire
 static uint8_t trendRef = UINT8_MAX;      // mediane de reference (dernier palier)
 
+/**
+ * @brief Réinitialise l'état du filtre de tendance de l'orage (mémoire tampon, compteur, valeur de référence).
+ */
 static void trendReset()
 {
   trendCount = 0;
@@ -2363,7 +2733,13 @@ static void trendReset()
   trendRef   = UINT8_MAX;
 }
 
-// Mediane de 3 valeurs sans tri ni division : max(min(a,b), min(max(a,b), c))
+/**
+ * @brief Calcule la médiane de trois valeurs sans tri ni division : max(min(a,b), min(max(a,b), c)).
+ * @param a Première valeur.
+ * @param b Deuxième valeur.
+ * @param c Troisième valeur.
+ * @return Médiane des trois valeurs.
+ */
 static uint8_t median3(uint8_t a, uint8_t b, uint8_t c)
 {
   if (a > b) { uint8_t t = a; a = b; b = t; }  // a = min, b = max
@@ -2371,6 +2747,10 @@ static uint8_t median3(uint8_t a, uint8_t b, uint8_t c)
   return (a > b) ? a : b;
 }
 
+/**
+ * @brief Met à jour la tendance de l'orage (se rapproche / s'éloigne, bits de QUEStionable:LIGHtning) à partir
+ * de la distance courante, en lissant les mesures par un filtre médian avec bande morte (hystérésis).
+ */
 void updateStormTrend()
 {
   // --- Pas d'orage exploitable : 0 = invalide, 63 = hors de portee ---
@@ -2416,6 +2796,9 @@ void updateStormTrend()
   // Sinon : variation dans la bande morte, tendance precedente conservee
 }
 
+/**
+ * @brief Affiche la dernière distance de l'orage mesurée, convertie en mètres (NaN si invalide, +infini si hors de portée).
+ */
 void fetchDistance()
 {
   float f;
@@ -2434,6 +2817,11 @@ void fetchDistance()
   displayFloat(f);
 }
 
+/**
+ * @brief Lit la distance de l'orage depuis le capteur AS3935, met à jour les statistiques générales et,
+ * si un éclair a été détecté, les statistiques spécifiques à la foudre et la tendance de l'orage.
+ * @param strike true si l'appel suit la détection d'un éclair (et non un simple changement de distance).
+ */
 void readDistance(bool strike)
 {
   lightning_distance = lightning.distanceToStorm();
@@ -2500,11 +2888,18 @@ void readDistance(bool strike)
   }
 }
 
+/**
+ * @brief Affiche la dernière température mesurée.
+ */
 void fetchTemperature()
 {
   displayFloat(temperature);
 }
 
+/**
+ * @brief Lit la tension sur l'entrée analogique A0 et calcule la température par calibration linéaire deux points ;
+ * met à jour les bits d'état de sur/sous-température de QUEStionable:TEMPerature.
+ */
 void readTemperature()
 {
   if (bitRead(tempReg.con, TEMP_NCAL) || (cal.t_gain == 0.0))
@@ -2534,6 +2929,9 @@ void readTemperature()
   }
 }
 
+/**
+ * @brief Affiche la dernière tension d'alimentation Vcc mesurée, en volts.
+ */
 void fetchVcc()
 {
   float f = float(voltVcc) / 1000.0;
@@ -2544,6 +2942,10 @@ void fetchVcc()
   displayFloat(f);
 }
 
+/**
+ * @brief Mesure la tension d'alimentation Vcc via la référence interne 1.1V et met à jour les bits d'état
+ * de sur/sous-tension de QUEStionable:VOLTage.
+ */
 void readVcc() {
 /*
     // Lit la référence interne 1.1V par rapport à AVcc
@@ -2564,6 +2966,10 @@ void readVcc() {
     voltVcc = result;
 }
 
+/**
+ * @brief Affiche la dernière énergie de foudre mesurée, en valeur brute ou en pourcentage de l'échelle maximale du capteur.
+ * @param inPercent true pour afficher un pourcentage plutôt que la valeur brute.
+ */
 void fetchEnergy(bool inPercent)
 {
   float f;
@@ -2582,6 +2988,11 @@ void fetchEnergy(bool inPercent)
   displayFloat(f);
 }
 
+/**
+ * @brief Lit l'énergie de la dernière détection depuis le capteur AS3935, met à jour les statistiques générales et,
+ * si un éclair a été détecté, les statistiques spécifiques à la foudre.
+ * @param strike true si l'appel suit la détection d'un éclair (et non un simple changement de distance).
+ */
 void readEnergy(bool strike)
 {
   lightning_energy = lightning.lightningEnergy();
@@ -2637,6 +3048,10 @@ void readEnergy(bool strike)
   }
 }
 
+/**
+ * @brief Affiche le type du dernier événement détecté (bruit, parasite, éclair), en forme textuelle ou en code numérique brut.
+ * @param text true pour un affichage textuel (ex: "LIGH"), false pour le code numérique brut.
+ */
 void fetchType(bool text)
 {
   if (lightning_intReason == UINT8_MAX)
@@ -2674,8 +3089,14 @@ void fetchType(bool text)
   }
 }
 
-/*
- * Parse and process standard IEEE 488.2 commands and queries (starting with '*')
+/**
+ * @brief Analyse et exécute une commande ou requête SCPI standard IEEE 488.2 (préfixée par '*' : *CAL, *CLS,
+ * *ESE, *ESR, *IDN, *OPC, *PSC, *PUD, *RCL, *RST, *SAV, *SRE, *STB, *TST, *WAI).
+ * @param command Mnémonique de la commande standard (sans le '*').
+ * @param isQuery true si c'est une requête (suffixe '?').
+ * @param argc Nombre d'arguments fournis.
+ * @param argv Tableau des arguments.
+ * @return 0 en cas de succès, sinon un code d'erreur SCPI.
  */
 int16_t processSCPIStandardCommand(char *command, bool isQuery, int argc, char *argv[])
 {
@@ -2869,8 +3290,14 @@ int16_t processSCPIStandardCommand(char *command, bool isQuery, int argc, char *
   return rc;
 }
 
-/*
- * Parse and process specific SCPI commands and queries (in ':' tree)
+/**
+ * @brief Analyse et exécute une commande ou requête SCPI spécifique à l'appareil (arborescence ':' :
+ * CALCulate, CALibration, DIAGnostic, FETCh, INITiate, MEASure, SENSe, STATus, SYSTem).
+ * @param command Chaîne de l'en-tête de commande (arborescence ':' complète, sans le premier ':').
+ * @param isQuery true si c'est une requête (suffixe '?').
+ * @param argc Nombre d'arguments fournis.
+ * @param argv Tableau des arguments.
+ * @return 0 en cas de succès, sinon un code d'erreur SCPI.
  */
 int16_t processSCPISpecificCommand(char *command, bool isQuery, int argc, char *argv[])
 {
@@ -4411,13 +4838,20 @@ int16_t processSCPISpecificCommand(char *command, bool isQuery, int argc, char *
   return rc;
 }
 
+/**
+ * @brief Indique si un caractère est un espace au sens IEEE 488.2 (§7.4.1.2 : codes ASCII 1 à 32, sauf LF).
+ * @param c Caractère à tester.
+ * @return true si `c` est considéré comme un espace.
+ */
 bool isBlank(uint8_t c)
 { // IEEE 488.2 §7.4.1.2 définit le white space comme les codes ASCII 0–9 et 11–32 (soit tout caractère ≤ 32 sauf LF)
   return (c > 0) && (c <= 32) && (c != '\n');
 }
 
-/// @brief Process SCPI commands
-/// @param command The command string to process (can be a list separated by ';')
+/**
+ * @brief Traite une ou plusieurs commandes/requêtes SCPI reçues sur le port série.
+ * @param command Chaîne de commande à traiter (peut contenir une liste de commandes séparées par ';').
+ */
 void processSCPICommands(char *command)
 {
   scpiOutput = false;
@@ -4764,6 +5198,11 @@ void processSCPICommands(char *command)
   }
 }
 
+/**
+ * @brief Traite la détection effective d'un éclair : incrémente le compteur, active brièvement la LED et le
+ * buzzer (durée et fréquence proportionnelles à l'énergie et à la distance), et masque temporairement les
+ * parasites générés par le PWM de la LED.
+ */
 void lightningDetected()
 {
   if (lightningCount < UINT32_MAX)
@@ -4799,6 +5238,10 @@ void lightningDetected()
   analogWrite(lightningLed, energyLed);
 }
 
+/**
+ * @brief Fonction d'initialisation Arduino : configure les broches, l'état SCPI de base, recharge la
+ * configuration persistante et la calibration depuis l'EEPROM, puis initialise le capteur AS3935 et son auto-calibration.
+ */
 /***************************************************************************************/
 void setup()
 {
@@ -4907,6 +5350,12 @@ void setup()
   lastLedUpdate = 0;
 }
 
+/**
+ * @brief Boucle principale Arduino : gère l'horodatage (uptime), l'extinction du buzzer, la réception et le
+ * traitement des commandes SCPI sur le port série, l'extinction progressive de la LED d'énergie, ainsi que
+ * les interruptions du capteur AS3935 (bruit, parasite, éclair, changement de distance) ou l'affichage de la
+ * source de calibration manuelle en cours.
+ */
 void loop()
 {
   static uint32_t lastMillis = 0;
